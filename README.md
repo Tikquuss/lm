@@ -29,14 +29,10 @@ See [trainer.py](src/trainer.py) and [train.sh](train.sh)
 ```
 %load_ext tensorboard
 
-log_dir=my/log/dir
-#task=clm
-task=mlm
-
-%tensorboard --logdir ${log_dir}/${task}/lightning_logs
+%tensorboard --logdir ${my/log/dir}/${task}/lightning_logs
 ```
 
-## Fine-tune a model a pre-trained model
+## Fine-tune a pre-trained model
 ```bash
 . TODO
 ```

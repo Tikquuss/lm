@@ -3,7 +3,7 @@
 None="__None__"
 
 # clm : gpt2, facebook/bart-large ... (https://huggingface.co/models?filter=causal-lm)
-# mlm : bert-base-uncased, roberta-base
+# mlm : bert-base-uncased, roberta-base, ...
 #model_name="gpt2"
 model_name="bert-base-uncased"
 from_pretrained=True
@@ -52,7 +52,7 @@ python3 -m src.trainer \
 		--tokenizer_params $tokenizer_params \
 		--dataset_name $dataset_name \
 		--data_files $data_files \
-		--text_column text \
+		--text_column $text_column \
 		--label_column $label_column \
 		--mlm_probability 0.15 \
 		--batch_size $batch_size \

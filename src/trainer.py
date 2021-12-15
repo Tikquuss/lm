@@ -7,15 +7,15 @@ from transformers import (
     AutoModelForMaskedLM
 )
 
+import os
+import click
+from loguru import logger
+
 MODELS_CLASS = {
     "clm" : AutoModelForCausalLM,
     "mlm" : AutoModelForMaskedLM
 }
 __None__ = '__None__'
-
-import os
-import click
-from loguru import logger
 
 from .dataset import LMLightningDataModule
 from .language_modelling import LMLightningModule
@@ -172,18 +172,14 @@ def main(
         config = AutoConfig.from_pretrained(model_name)
         model = MODELS_CLASS[task].from_config(config)
     
+    model.resize_token_embeddings(len(tokenizer))
+    
     if freeze_transformer :
         for param in model.parameters():
             param.requires_grad = False
-            
-    pl_model = LMLightningModule(
-        model=model,
-        learning_rate=learning_rate,
-        lr_factor=lr_factor,
-        lr_patience=lr_patience,
-        optimizer_name=optimizer_name,
-        label_column=label_column
-    )
+
+    n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+    logger.info(f"Training new model - Total size={n_params/2**20:.2f}M params")
     
     trainer_config = {
         "max_epochs": max_epochs,
@@ -229,7 +225,43 @@ def main(
     
     pl_trainer = pl.Trainer(**trainer_config)
     
+    if label_column is not None :
+        d_model = model.config.to_dict().get('hidden_size', None)
+        if d_model is None :
+            # https://github.com/huggingface/transformers/blob/master/src/transformers/models/gpt2/modeling_gpt2.py#L1044
+            # TODO : This is just for gpt2, ...
+            d_model = model.lm_head.in_features
+            def bert(input_ids, attention_mask = None, token_type_ids = None):
+                return model.transformer(
+                                input_ids = input_ids, 
+                                attention_mask = attention_mask,
+                                token_type_ids = token_type_ids)
+            model.bert = bert
+        clf_params = {
+            "label_column" : label_column,
+            "d_model": d_model,
+            "n_labels" : 2, 
+            "n_layers" : 1, 
+            "intermediate_dim": 100, 
+            "criterion": None, 
+            "dropout" : 0.1, 
+            "multi_label":False
+        }
+    else :
+        clf_params = {}
+    decoder_start_token_id = tokenizer.pad_token_id
     if not eval_only :
+        pl_model = LMLightningModule(
+            model=model,
+            task=task,
+            learning_rate=learning_rate,
+            lr_factor=lr_factor,
+            lr_patience=lr_patience,
+            optimizer_name=optimizer_name,
+            decoder_start_token_id=decoder_start_token_id,
+            clf_params=clf_params
+        )
+    
         logger.info("Training starts...")
         pl_model.train()
         pl_trainer.fit(pl_model, datamodule=pl_data_module)
@@ -240,11 +272,13 @@ def main(
         pl_model = LMLightningModule.load_from_checkpoint(
             checkpoint_path=resume_from_checkpoint,
             model=model,
+            task = task,
             learning_rate=learning_rate,
             lr_factor=lr_factor,
             lr_patience=lr_patience,
             optimizer_name=optimizer_name,
-            label_column=label_column
+            decoder_start_token_id=decoder_start_token_id,
+            clf_params=clf_params
         )
         
         logger.info("Evaluation starts....")
@@ -255,10 +289,6 @@ def main(
         
     pl_model.eval()
     pl_trainer.test(pl_model, datamodule=pl_data_module)
-        
-    
-    
-    
-    
+
 if __name__ == "__main__":
     main()

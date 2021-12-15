@@ -51,6 +51,7 @@ def mlm_collate_fn(features, mask_token_id : int, mlm_collator : DataCollatorFor
         features["attention_mask"] = padding_mask 
     features['input_ids'] = torch.LongTensor(x_mlm['input_ids'])
     features['labels'] = torch.LongTensor(x_mlm['labels']) 
+    features["mask_token_index"] = torch.where(features['input_ids'] == mask_token_id)[1]
     #features["token_type_ids"] = torch.LongTensor(features["token_type_ids"])
     features["token_type_ids"] = pad_sequence(
         [torch.LongTensor(x_i) for x_i in features["token_type_ids"]], 
@@ -88,6 +89,7 @@ def clm_collate_fn(features, pad_token_id : int, attn_pad_token_id : int = 0):
     """
     #features["labels"] = features["input_ids"].copy()
     features["labels"] = features["input_ids"].clone()
+    #features["mask_token_index"] = None
     return features
 
 class LMLightningDataModule(pl.LightningDataModule):
